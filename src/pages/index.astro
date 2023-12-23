@@ -1,0 +1,26 @@
+---
+import "../styles/global.css";
+import Chessboard from "../components/Chessboard.tsx";
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>NyChess 2.0 | A Simple Chess AI by Nnisarg</title>
+  </head>
+  <body
+    class="h-hero flex flex-col justify-center items-center bg-neutral-700 text-white p-4 overflow-hidden font-sans"
+  >
+    <div
+      class="w-full max-w-2xl flex flex-col justify-center gap-4 items-center"
+    >
+      <div class="w-full max-w-2xl flex flex-col p-2">
+        <h1>NyChess 2.0</h1>
+        <p>A Simple Chess AI by <a>Nnisarg</a></p>
+      </div>
+      <Chessboard client:load />
+    </div>
+  </body>
+</html>
