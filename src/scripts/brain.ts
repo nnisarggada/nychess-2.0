@@ -78,13 +78,13 @@ class GameState {
     this.halfMoveClock = res.halfMoveClock;
     this.fullMoveNumber = res.fullMoveNumber;
     this.moveLog = [];
-    this.inCheck = this.checkForPinsAndChecks()[0];
+    this.inCheck = this.isInCheck();
     this.validMoves = this.getValidMoves();
     this.draw = false;
     this.checkmate = false;
     this.winner = "";
     this.whiteHuman = true;
-    this.blackHuman = true;
+    this.blackHuman = false;
   }
 
   loadFen(fen: string) {
@@ -190,20 +190,19 @@ class GameState {
 
     for (const move of allMoves) {
       this.makeMove(move)
-      const kingInCheck = this.checkForPinsAndChecks()[0];
+      const kingInCheck = this.isInCheck();
       this.undoMove();
 
       if (!kingInCheck) {
         moves.push(move);
       }
     }
+
+    moves = moves.filter((move) => !move.isEnPassant || move.endSquare === this.enPassant);
+
     this.validMoves = moves;
+
     return moves;
-
-
-    this.validMoves = allMoves;
-    return allMoves;
-
   }
 
   getAllMoves() {
@@ -407,7 +406,7 @@ class GameState {
         );
         moves.push(newMove);
       }
-      if (this.board[destinationIndex] == "" && indexToSquare(destinationIndex) == this.enPassant) {
+      if (this.board[destinationIndex] == "" && (indexToSquare(destinationIndex) == this.enPassant)) {
         const newMove = new Move(
           indexToSquare(pawnIndex),
           indexToSquare(destinationIndex),
@@ -526,109 +525,108 @@ class GameState {
     return moves;
   }
 
-  checkForPinsAndChecks(): [boolean, Array<Move>, Array<Move>] {
-    const pins: Array<Move> = [];
-    const checks: Array<Move> = [];
-    let inCheck = false;
-
-    const enemyColor = this.whiteToMove ? "b" : "w";
-    const allyColor = this.whiteToMove ? "w" : "b";
-    const kingIndex = this.board.indexOf(this.whiteToMove ? "wK" : "bK");
+  isInCheck(): boolean {
+    const enemyColor = this.whiteToMove ? 'b' : 'w';
+    const allyColor = this.whiteToMove ? 'w' : 'b';
+    const kingIndex = this.board.indexOf(this.whiteToMove ? 'wK' : 'bK');
     const kingStartRow = Math.floor(kingIndex / 8);
     const kingStartCol = kingIndex % 8;
 
-    const directions = [
+    // Check for horizontal and vertical threats (rooks and queens)
+    const rookDirections = [
       [-1, 0], [0, -1], [1, 0], [0, 1],
-      [-1, -1], [-1, 1], [1, -1], [1, 1],
     ];
 
-    directions.forEach((d) => {
-      let possiblePin: Move | null = null;
+    for (const d of rookDirections) {
+      const [dx, dy] = d;
+      let row = kingStartRow + dx;
+      let col = kingStartCol + dy;
 
-      for (let i = 1; i < 8; i++) {
-        const endRow = kingStartRow + d[0] * i;
-        const endCol = kingStartCol + d[1] * i;
+      while (row >= 0 && row < 8 && col >= 0 && col < 8) {
+        const piece = this.board[row * 8 + col];
 
-        if (endRow >= 0 && endRow < 8 && endCol >= 0 && endCol < 8) {
-          const endPiece = this.board[endRow * 8 + endCol];
-
-          if (endPiece[0] === allyColor && endPiece[1] !== "K") {
-            if (!possiblePin) {
-              possiblePin = new Move(
-                indexToSquare(endRow * 8 + endCol),
-                indexToSquare(kingIndex),
-                endPiece,
-                "",
-              );
-            } else {
-              break;
-            }
-          } else if (endPiece[0] === enemyColor) {
-            const type = endPiece[1];
-
-            if (
-              (0 <= d[0] && d[0] <= 3 && type === "R") ||
-              (4 <= d[0] && d[0] <= 7 && type === "B") ||
-              (i === 1 &&
-                type === "P" &&
-                ((enemyColor === "w" && 6 <= d[0] && d[0] <= 7) ||
-                  (enemyColor === "b" && 4 <= d[0] && d[0] <= 5))) ||
-              type === "Q" ||
-              (i === 1 && type === "K")
-            ) {
-              if (!possiblePin) {
-                inCheck = true;
-                checks.push(
-                  new Move(
-                    indexToSquare(endRow * 8 + endCol),
-                    indexToSquare(kingIndex),
-                    endPiece,
-                    "",
-                  )
-                );
-                break;
-              } else {
-                pins.push(possiblePin);
-                break;
-              }
-            } else {
-              break;
-            }
-          }
+        if (piece === '') {
+          row += dx;
+          col += dy;
         } else {
+          if (piece[0] === enemyColor && (piece[1] === 'R' || piece[1] === 'Q')) {
+            return true;
+          }
           break;
         }
       }
-    });
+    }
 
+    // Check for diagonal threats (bishops and queens)
+    const bishopDirections = [
+      [-1, -1], [-1, 1], [1, -1], [1, 1],
+    ];
+
+    for (const d of bishopDirections) {
+      const [dx, dy] = d;
+      let row = kingStartRow + dx;
+      let col = kingStartCol + dy;
+
+      while (row >= 0 && row < 8 && col >= 0 && col < 8) {
+        const piece = this.board[row * 8 + col];
+
+        if (piece === '') {
+          row += dx;
+          col += dy;
+        } else {
+          if (piece[0] === enemyColor && (piece[1] === 'B' || piece[1] === 'Q')) {
+            return true;
+          }
+          break;
+        }
+      }
+    }
+
+    // Check for knight threats
     const knightMoves = [
       [-2, -1], [-2, 1], [-1, -2], [-1, 2],
       [1, -2], [1, 2], [2, -1], [2, 1],
     ];
 
-    knightMoves.forEach((m) => {
-      const endRow = kingStartRow + m[0];
-      const endCol = kingStartCol + m[1];
+    for (const m of knightMoves) {
+      const [dx, dy] = m;
+      const row = kingStartRow + dx;
+      const col = kingStartCol + dy;
 
-      if (endRow >= 0 && endRow < 8 && endCol >= 0 && endCol < 8) {
-        const endPiece = this.board[endRow * 8 + endCol];
+      if (row >= 0 && row < 8 && col >= 0 && col < 8) {
+        const piece = this.board[row * 8 + col];
 
-        if (endPiece[0] === enemyColor && endPiece[1] === "N") {
-          inCheck = true;
-          checks.push(
-            new Move(
-              indexToSquare(endRow * 8 + endCol),
-              indexToSquare(kingIndex),
-              endPiece,
-              "",
-            )
-          );
+        if (piece[0] === enemyColor && piece[1] === 'N') {
+          return true;
         }
       }
-    });
+    }
 
-    return [inCheck, pins, checks];
+    // Check for pawn threats
+    const pawnDirection = this.whiteToMove ? 1 : -1;
+    const pawnMoves = [
+      [pawnDirection, -1],
+      [pawnDirection, 1],
+    ];
+
+    for (const pm of pawnMoves) {
+      const [dx, dy] = pm;
+      const row = kingStartRow + dx;
+      const col = kingStartCol + dy;
+
+      if (row >= 0 && row < 8 && col >= 0 && col < 8) {
+        const piece = this.board[row * 8 + col];
+
+        if (piece[0] === enemyColor && piece[1] === 'P') {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
+
+
 
   getBestMove() {
     const moves = this.getValidMoves();
@@ -709,6 +707,7 @@ class GameState {
 
   actuallyMakeMove(move: Move) {
     this.makeMove(move);
+    console.log(this.enPassant)
     this.whiteToMove = !this.whiteToMove;
 
     const oldSquare = document.getElementById(move.startSquare);
@@ -761,56 +760,28 @@ class GameState {
     this.castleLog.pop();
     this.castling = this.castleLog.at(-1) || "KQkq";
     this.enPassant = this.enPassantLog.at(-1) || "-";
-    if (!move) return;
+    if (!move) return undefined;
     this.board[squareToIndex(move.startSquare)] = move.pieceMoved;
     this.board[squareToIndex(move.endSquare)] = move.pieceCaptured;
 
     if (move.isEnPassant) {
-      if (move.pieceMoved[0] == "w") {
-        this.board[squareToIndex(move.endSquare) + 8] = "bP";
-      }
-      else {
-        this.board[squareToIndex(move.endSquare) - 8] = "wP";
-      }
+      const direction = this.whiteToMove ? 1 : -1;
+      this.board[squareToIndex(move.endSquare) + direction * 8] = move.pieceCaptured;
     }
 
     if (move.isCastle) {
-      if (move.pieceMoved[0] == "w") {
-        this.board[squareToIndex("e1")] = "wK";
-        if (move.endSquare == "c1") {
-
-          this.board[squareToIndex("d1")] = "";
-          this.board[squareToIndex("c1")] = "";
-          this.board[squareToIndex("a1")] = "wR";
-        }
-        else {
-          this.board[squareToIndex("f1")] = "";
-          this.board[squareToIndex("g1")] = "";
-          this.board[squareToIndex("h1")] = "wR";
-        }
-      }
-      else {
-        this.board[squareToIndex("e8")] = "bK";
-        if (move.endSquare == "c8") {
-          this.board[squareToIndex("d8")] = "";
-          this.board[squareToIndex("c8")] = "";
-          this.board[squareToIndex("a8")] = "bR";
-        }
-        else {
-          this.board[squareToIndex("f8")] = "";
-          this.board[squareToIndex("g8")] = "";
-          this.board[squareToIndex("h8")] = "bR";
-        }
-      }
+      const rookStartSquare = move.endSquare === "c1" || move.endSquare === "c8" ? "a" : "h";
+      const rookEndSquare = move.endSquare === "c1" || move.endSquare === "c8" ? "d" : "f";
+      const rookType = move.pieceMoved[0].toLowerCase() + "R";
+      this.board[squareToIndex(rookStartSquare + move.endSquare[1])] = rookType;
+      this.board[squareToIndex(rookEndSquare + move.endSquare[1])] = "";
     }
-
     return move;
   }
 
   actuallyUndoMove() {
     const move = this.undoMove();
     if (!move) return;
-    console.log(this.castling)
 
     const oldSquare = document.getElementById(move.startSquare);
     const newSquare = document.getElementById(move.endSquare);
@@ -970,7 +941,6 @@ class InputHandler {
 
 
       const move = new Move(this.selectedSquare, square, pieceMoved, pieceCaptured);
-      console.log(move)
 
       let foundMove = false;
 
@@ -982,6 +952,13 @@ class InputHandler {
 
       if (foundMove) {
         game.actuallyMakeMove(move)
+        if ((!game.blackHuman && !game.whiteToMove) || (!game.whiteHuman && game.whiteToMove)) {
+          let aiMove = game.getBestMove()
+          while (!aiMove) {
+            aiMove = game.getBestMove()
+          }
+          game.actuallyMakeMove(aiMove)
+        }
       }
       this.selectedSquare = "";
     }
