@@ -66,6 +66,7 @@ class GameState {
   winner: string;
   whiteHuman: boolean;
   blackHuman: boolean;
+  gameStart: boolean;
 
   constructor(fen: string = startingFen) {
     const res = this.loadFen(fen);
@@ -85,6 +86,7 @@ class GameState {
     this.winner = "";
     this.whiteHuman = true;
     this.blackHuman = false;
+    this.gameStart = false;
   }
 
   loadFen(fen: string) {
@@ -397,14 +399,16 @@ class GameState {
         moves.push(newMove);
       }
       destinationIndex = pawnIndex + (this.whiteToMove ? -9 : 7);
-      if (this.board[destinationIndex][0] == (this.whiteToMove ? "b" : "w")) {
-        const newMove = new Move(
-          indexToSquare(pawnIndex),
-          indexToSquare(destinationIndex),
-          pieceToFind,
-          this.board[destinationIndex],
-        );
-        moves.push(newMove);
+      if (Math.abs(destinationIndex % 8 - pawnIndex % 8) <= 1) {
+        if (this.board[destinationIndex][0] == (this.whiteToMove ? "b" : "w")) {
+          const newMove = new Move(
+            indexToSquare(pawnIndex),
+            indexToSquare(destinationIndex),
+            pieceToFind,
+            this.board[destinationIndex],
+          );
+          moves.push(newMove);
+        }
       }
       if (this.board[destinationIndex] == "" && (indexToSquare(destinationIndex) == this.enPassant)) {
         const newMove = new Move(
@@ -416,14 +420,16 @@ class GameState {
         moves.push(newMove);
       }
       destinationIndex = pawnIndex + (this.whiteToMove ? -7 : 9);
-      if (this.board[destinationIndex][0] == (this.whiteToMove ? "b" : "w")) {
-        const newMove = new Move(
-          indexToSquare(pawnIndex),
-          indexToSquare(destinationIndex),
-          pieceToFind,
-          this.board[destinationIndex],
-        );
-        moves.push(newMove);
+      if (Math.abs(destinationIndex % 8 - pawnIndex % 8) <= 1) {
+        if (this.board[destinationIndex][0] == (this.whiteToMove ? "b" : "w")) {
+          const newMove = new Move(
+            indexToSquare(pawnIndex),
+            indexToSquare(destinationIndex),
+            pieceToFind,
+            this.board[destinationIndex],
+          );
+          moves.push(newMove);
+        }
       }
       if ((this.board[destinationIndex] == "") && (indexToSquare(destinationIndex) == this.enPassant)) {
         const newMove = new Move(
@@ -525,14 +531,12 @@ class GameState {
     return moves;
   }
 
-  isInCheck(): boolean {
+  isInCheck() {
     const enemyColor = this.whiteToMove ? 'b' : 'w';
-    const allyColor = this.whiteToMove ? 'w' : 'b';
     const kingIndex = this.board.indexOf(this.whiteToMove ? 'wK' : 'bK');
     const kingStartRow = Math.floor(kingIndex / 8);
     const kingStartCol = kingIndex % 8;
 
-    // Check for horizontal and vertical threats (rooks and queens)
     const rookDirections = [
       [-1, 0], [0, -1], [1, 0], [0, 1],
     ];
@@ -603,7 +607,7 @@ class GameState {
     }
 
     // Check for pawn threats
-    const pawnDirection = this.whiteToMove ? 1 : -1;
+    const pawnDirection = this.whiteToMove ? -1 : 1;
     const pawnMoves = [
       [pawnDirection, -1],
       [pawnDirection, 1],
@@ -707,8 +711,7 @@ class GameState {
 
   actuallyMakeMove(move: Move) {
     this.makeMove(move);
-    console.log(this.enPassant)
-    this.whiteToMove = !this.whiteToMove;
+    this.gameStart = true;
 
     const oldSquare = document.getElementById(move.startSquare);
     const newSquare = document.getElementById(move.endSquare);
@@ -718,7 +721,8 @@ class GameState {
 
 
     if (move.isEnPassant) {
-      const targetSquare = document.getElementById(move.endSquare[0] + (parseInt(move.endSquare[1]) + (game.whiteToMove ? 1 : -1)));
+      const targetSquare = document.getElementById(move.endSquare[0] + (parseInt(move.endSquare[1]) + (game.whiteToMove ? -1 : -1)));
+      console.log(targetSquare);
       targetSquare!.innerHTML = "";
     }
     else if (move.isCastle) {
@@ -744,7 +748,7 @@ class GameState {
     }
 
     const turnIndicator = document.getElementById("turn-indicator");
-    if (game.whiteToMove) {
+    if (!game.whiteToMove) {
       turnIndicator?.classList.add("bg-white");
       turnIndicator?.classList.remove("bg-black");
     }
@@ -752,6 +756,29 @@ class GameState {
       turnIndicator?.classList.remove("bg-white");
       turnIndicator?.classList.add("bg-black");
     }
+
+    this.whiteToMove = !this.whiteToMove;
+    const validMoves = this.getValidMoves();
+
+    console.log(move);
+
+    if (validMoves.length == 0) {
+      this.gameStart = false;
+      if (this.isInCheck()) {
+        this.checkmate = true;
+        this.winner = this.whiteToMove ? "Black" : "White";
+        setTimeout(() => {
+          alert(`Checkmate! ${this.winner} wins!`);
+        }, 200);
+      }
+      else {
+        this.draw = true;
+        setTimeout(() => {
+          alert("Draw!");
+        }, 200);
+      }
+    }
+
   }
 
   undoMove() {
@@ -828,6 +855,16 @@ class GameState {
       }
     }
 
+    const turnIndicator = document.getElementById("turn-indicator");
+    if (!game.whiteToMove) {
+      turnIndicator?.classList.add("bg-white");
+      turnIndicator?.classList.remove("bg-black");
+    }
+    else {
+      turnIndicator?.classList.remove("bg-white");
+      turnIndicator?.classList.add("bg-black");
+    }
+
     this.whiteToMove = !this.whiteToMove;
   }
 }
@@ -872,6 +909,11 @@ class InputHandler {
       this.selectedSquare = "";
 
       game.actuallyUndoMove();
+
+      if ((!game.whiteToMove && !game.blackHuman) || (game.whiteToMove && !game.whiteHuman)) {
+        game.actuallyUndoMove();
+      }
+
     }
   }
 
@@ -963,6 +1005,10 @@ class InputHandler {
       this.selectedSquare = "";
     }
   }
+}
+
+while (game.gameStart) {
+
 }
 
 export let inputHandler = new InputHandler();
